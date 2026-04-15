@@ -10,8 +10,6 @@ The repository is organized into six core modules. Each module folder contains t
 * Source Code: The firmware implementation is located within the src folder of each task. Path Example: 2_Peripherals/task_2-4/src/main.c
 * Shared hardware definitions used across all modules are maintained in the lib/ses directory.
 
----
-
 ## Automated Test Infrastructure
 
 This repository includes a comprehensive automated testing system for embedded C drivers with CI/CD integration.
@@ -37,7 +35,6 @@ Automatically triggered on commits to `lib/ses/` or `test/`:
 3. Analyzes code coverage
 4. Generates HTML coverage reports
 5. Publishes results to GitHub Actions artifacts
-6. Posts results to Pull Request comments
 
 ### Viewing Coverage Reports
 1. Go to GitHub → Actions
@@ -58,4 +55,3 @@ To add tests for a new driver (e.g., button driver):
 - **LCOV/gcov** - Code coverage analysis
 - **Unity Framework** - Unit testing
 - **Mock Hardware** - Cross-platform testing
-- **Python** - Automation scripts (scripts/generate_tests_copilot.py)
