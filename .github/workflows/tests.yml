@@ -127,7 +127,7 @@ jobs:
       # 8. UPLOAD COVERAGE ARTIFACTS
       # ========================================================================
       - name: Upload Coverage Report as Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-report-html
@@ -135,7 +135,7 @@ jobs:
           retention-days: 30
 
       - name: Upload Coverage Data
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-data
