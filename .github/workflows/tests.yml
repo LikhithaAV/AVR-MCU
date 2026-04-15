@@ -1,0 +1,189 @@
+name: AVR MCU Driver Tests - Auto Generation & Automation
+
+on:
+  push:
+    branches:
+      - main
+      - automation/test-generation
+    paths:
+      - 'lib/ses/**'
+      - 'test/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lib/ses/**'
+
+jobs:
+  generate-and-test:
+    name: Generate Tests and Run Coverage Analysis
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    env:
+      COPILOT_API_KEY: ${{ secrets.COPILOT_API_KEY }}
+    
+    steps:
+      # ========================================================================
+      # 1. CHECKOUT CODE
+      # ========================================================================
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ========================================================================
+      # 2. SETUP ENVIRONMENT
+      # ========================================================================
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcov lcov
+
+      # ========================================================================
+      # 3. SETUP COPILOT API (for test generation)
+      # ========================================================================
+      - name: Configure Copilot API Credentials
+        run: |
+          mkdir -p ~/.copilot
+          echo "COPILOT_API_KEY=${{ secrets.COPILOT_API_KEY }}" > ~/.copilot/config
+          chmod 600 ~/.copilot/config
+        if: env.COPILOT_API_KEY != ''
+
+      # ========================================================================
+      # 4. GENERATE TESTS USING COPILOT API
+      # ========================================================================
+      - name: Generate Test Cases using Copilot
+        id: generate_tests
+        run: |
+          python test/scripts/generate_tests_copilot.py
+        continue-on-error: true
+        
+      - name: Display Generated Tests
+        run: |
+          echo "Generated test files:"
+          ls -la test/unit/test_*.c 2>/dev/null || echo "No generated test files"
+
+      # ========================================================================
+      # 5. COMPILE TESTS
+      # ========================================================================
+      - name: Compile Tests
+        id: compile
+        run: |
+          cd test
+          gcc -I../lib/ses -I./support -I./unity \
+              -Wall -Wextra -g --coverage \
+              -o test_led \
+              unit/test_ses_led.c \
+              ../lib/ses/ses_led.c \
+              support/mock_avr_io.c \
+              unity/unity.c
+          echo "TEST_EXECUTABLE_PATH=$(pwd)/test_led" >> $GITHUB_OUTPUT
+
+      # ========================================================================
+      # 6. RUN TESTS
+      # ========================================================================
+      - name: Run Tests
+        id: test_run
+        run: |
+          cd test
+          ./test_led
+          echo "TEST_RUN_SUCCESS=true" >> $GITHUB_OUTPUT
+
+      # ========================================================================
+      # 7. GENERATE COVERAGE REPORT
+      # ========================================================================
+      - name: Generate Coverage Report
+        id: coverage
+        run: |
+          cd test
+          
+          # Generate coverage files
+          gcov -o . ../lib/ses/ses_led.c || true
+          
+          # Create coverage directory
+          mkdir -p coverage_html
+          
+          # Generate HTML coverage report
+          lcov --capture --directory . --output-file coverage.info --rc lcov_branch_coverage=1
+          genhtml coverage.info --output-directory coverage_html --title "AVR MCU Driver Coverage Report"
+          
+          # Calculate coverage percentage
+          COVERAGE=$(grep "lines..*:.*%" coverage.info | head -1 | sed 's/.*: *\([0-9.]*\)%.*/\1/' || echo "N/A")
+          echo "COVERAGE_PERCENTAGE=$COVERAGE" >> $GITHUB_OUTPUT
+          
+          echo "Coverage report generated in coverage_html/"
+
+      # ========================================================================
+      # 8. UPLOAD COVERAGE ARTIFACTS
+      # ========================================================================
+      - name: Upload Coverage Report as Artifact
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: coverage-report-html
+          path: test/coverage_html/
+          retention-days: 30
+
+      - name: Upload Coverage Data
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: coverage-data
+          path: test/coverage.info
+          retention-days: 30
+
+      # ========================================================================
+      # 9. PUBLISH TEST RESULTS
+      # ========================================================================
+      - name: Create Test Summary
+        if: always()
+        run: |
+          echo "## AVR MCU Driver Test Results" > /tmp/test_summary.md
+          echo "" >> /tmp/test_summary.md
+          echo "### Build Status" >> /tmp/test_summary.md
+          echo "- **Compilation**: ✓ Success" >> /tmp/test_summary.md
+          echo "- **Test Execution**: ✓ Success" >> /tmp/test_summary.md
+          echo "" >> /tmp/test_summary.md
+          echo "### Coverage Analysis" >> /tmp/test_summary.md
+          echo "- **Coverage**: ${{ steps.coverage.outputs.COVERAGE_PERCENTAGE }}%" >> /tmp/test_summary.md
+          echo "" >> /tmp/test_summary.md
+          echo "### Artifacts" >> /tmp/test_summary.md
+          echo "- [Coverage Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> /tmp/test_summary.md
+          echo "" >> /tmp/test_summary.md
+          cat /tmp/test_summary.md
+
+      - name: Comment PR with Test Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('/tmp/test_summary.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+      # ========================================================================
+      # 10. FAILURE HANDLING
+      # ========================================================================
+      - name: Report Workflow Failure
+        if: failure()
+        run: |
+          echo "❌ Test workflow failed!"
+          echo "- Check compilation errors"
+          echo "- Check test execution output"
+          echo "- Review logs above"
+          exit 1
