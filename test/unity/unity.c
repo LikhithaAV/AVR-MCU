@@ -7,11 +7,6 @@
 
 #include "unity.h"
 
-/* Default setUp and tearDown implementations */
-void setUp(void) {
-    /* Setup code runs before each test */
-}
-
-void tearDown(void) {
-    /* Cleanup code runs after each test */
-}
+/* Forward declarations - implemented by test files */
+extern void setUp(void);
+extern void tearDown(void);
