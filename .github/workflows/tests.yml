@@ -80,7 +80,7 @@ jobs:
         id: compile
         run: |
           cd test
-          gcc -I../lib/ses -I./support -I./unity \
+          gcc -I./support -I../lib/ses -I./unity \
               -Wall -Wextra -g --coverage \
               -o test_led \
               unit/test_ses_led.c \
